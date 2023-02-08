@@ -4,6 +4,8 @@ This project is a small demonstration that shows one possible way to create a 3D
 similar to what you would find in games like Runescape or Populous. In this demo landmass are broken up into chunks
 and rendered based on the camera location.
 
+![Program-Preview](https://github.com/unenergizer/Gdx-Tile-Land-Gen/blob/master/screenshot.png)
+
 Clone this project and feel free to edit the `Constants` class. This class will allow you to resize chunks, the world size, and much more! Check it out.
 
 ## gdx-liftoff
