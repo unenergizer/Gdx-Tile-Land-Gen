@@ -5,7 +5,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.*;
 import com.badlogic.gdx.graphics.g3d.Material;
 import com.badlogic.gdx.graphics.g3d.Model;
-import com.badlogic.gdx.graphics.g3d.ModelInstance;
+import com.badlogic.gdx.graphics.g3d.ModelCache;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.TextureAttribute;
 import com.badlogic.gdx.graphics.g3d.model.Node;
@@ -15,7 +15,6 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.utils.StringBuilder;
 import lombok.RequiredArgsConstructor;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -276,7 +275,7 @@ public class ChunkHandler extends ApplicationAdapter {
      * This is going to get the nearby chunks and only render those. This isn't the best way to do this
      * and this should only be considered a hack.
      */
-    public void getNearbyChunks(List<ModelInstance> modelInstanceList) {
+    public void getNearbyChunks(ModelCache cache) {
 
         int camX = (int) camera.position.x;
         int camZ = (int) camera.position.z;
@@ -290,10 +289,10 @@ public class ChunkHandler extends ApplicationAdapter {
                 Chunk chunk = getChunk(x, z, false);
                 if (chunk == null) continue;
 
-                ModelInstance modelInstance = chunk.getModelInstance();
-                if (modelInstance == null) continue;
+                ModelCache modelCache = chunk.getModelCache();
+                if (modelCache == null) continue;
 
-                modelInstanceList.add(modelInstance);
+                cache.add(modelCache);
             }
         }
     }

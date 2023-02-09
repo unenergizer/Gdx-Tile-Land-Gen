@@ -1,6 +1,7 @@
 package tile.land.gen;
 
 import com.badlogic.gdx.graphics.g3d.Model;
+import com.badlogic.gdx.graphics.g3d.ModelCache;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -18,11 +19,18 @@ public class Chunk {
     private final int chunkX, chunkZ;
     private Model model;
     private ModelInstance modelInstance;
+    private ModelCache modelCache;
 
     public void setModel(Model model) {
         this.model = model;
         this.modelInstance = new ModelInstance(model);
         modelInstance.transform.setTranslation(chunkX * CHUNK_SIZE, 0, chunkZ * CHUNK_SIZE);
+
+        // Set up the model cache for this model
+        modelCache = new ModelCache();
+        modelCache.begin();
+        modelCache.add(modelInstance);
+        modelCache.end();
     }
 
     @Override

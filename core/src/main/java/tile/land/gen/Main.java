@@ -15,9 +15,6 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.StringBuilder;
 
-import java.util.LinkedList;
-import java.util.List;
-
 /**
  * The main class, the {@link ApplicationListener} is the implementation shared by all platforms.
  */
@@ -33,9 +30,9 @@ public class Main extends ApplicationAdapter {
      */
     private final ModelBuilder modelBuilder = new ModelBuilder();
     /**
-     * ModelInstances to be rendered.
+     * ModelCache to be rendered.
      */
-    private final List<ModelInstance> instances = new LinkedList<>();
+    private final ModelCache modelCache = new ModelCache();
     /**
      * Handles the creation of land chunks.
      */
@@ -91,9 +88,10 @@ public class Main extends ApplicationAdapter {
     }
 
     private void updateModelInstanceList() {
-        instances.clear();
-        instances.add(xyzModelInstance);
-        chunkHandler.getNearbyChunks(instances);
+        modelCache.begin();
+        modelCache.add(xyzModelInstance);
+        chunkHandler.getNearbyChunks(modelCache);
+        modelCache.end();
     }
 
     @Override
@@ -106,7 +104,7 @@ public class Main extends ApplicationAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
         modelBatch.begin(camera);
-        modelBatch.render(instances, environment);
+        modelBatch.render(modelCache, environment);
         modelBatch.end();
 
         stageHandler.render();
@@ -117,7 +115,6 @@ public class Main extends ApplicationAdapter {
         stageHandler.dispose();
 
         // models
-        instances.clear();
         chunkHandler.dispose();
         modelBatch.dispose();
         xyzModel.dispose();
