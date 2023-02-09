@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.g3d.utils.FirstPersonCameraController;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.StringBuilder;
 
 import java.util.LinkedList;
@@ -63,6 +64,7 @@ public class Main extends ApplicationAdapter {
         camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         camera.position.set(0f, 10f, -5f);
         camera.lookAt(0, 0, 0);
+        camera.up.set(Vector3.Y);
         camera.near = 1f;
         camera.far = 1000f;
         camera.update();
