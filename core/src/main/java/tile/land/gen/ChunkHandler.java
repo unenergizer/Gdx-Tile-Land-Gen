@@ -48,7 +48,7 @@ public class ChunkHandler extends ApplicationAdapter {
         for (int x = 0; x < WORLD_X_LENGTH; x++) {
             for (int z = 0; z < WORLD_Z_LENGTH; z++) {
                 Chunk chunk = getChunk(x, z, true);
-                Model model = generateChunkModel(texture, material, attributes, heightmapProcessor, x, z);
+                Model model = generateChunkModel(texture, material, attributes, x, z);
                 Objects.requireNonNull(chunk).setModel(model);
             }
         }
@@ -72,8 +72,6 @@ public class ChunkHandler extends ApplicationAdapter {
      * @param texture The current tile texture file.
      */
     private void exampleModifyChunkTile(Texture texture) {
-        // Grab the existing material? If all rectangles share the same material, any edit here will be for all of them
-        //        Material material1 = node.parts.get(0).material;
 
         // Pick the tile you want to edit here
         int x = 1;
@@ -83,6 +81,8 @@ public class ChunkHandler extends ApplicationAdapter {
         Node node = nodeData.getNode();
 
         NodePart nodePart = node.parts.get(0);
+        // Grab the existing material? If all rectangles share the same material, any edit here will be for all of them
+        //        Material material1 = node.parts.get(0).material;
         Material material1 = new Material(TextureAttribute.createDiffuse(texture)); // Create a new material so to not affect other tiles
         material1.set(ColorAttribute.createDiffuse(Color.BLUE));
         nodePart.material = material1;
@@ -99,12 +99,11 @@ public class ChunkHandler extends ApplicationAdapter {
      * @param texture            The texture to paint on this model.
      * @param material           The material for this model.
      * @param attributes         The attributes for this model.
-     * @param heightmapProcessor The heightmap processor we will get vertex height from.
      * @param chunkX             The X location of this chunk.
      * @param chunkZ             The Z location of this chunk.
      * @return A model that represents a landscape.
      */
-    private Model generateChunkModel(Texture texture, Material material, long attributes, HeightmapProcessor heightmapProcessor, int chunkX, int chunkZ) {
+    private Model generateChunkModel(Texture texture, Material material, long attributes, int chunkX, int chunkZ) {
         modelBuilder.begin();
         modelBuilder.manage(texture);
 
