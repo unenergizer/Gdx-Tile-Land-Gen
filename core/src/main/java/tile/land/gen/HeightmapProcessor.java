@@ -52,6 +52,6 @@ public class HeightmapProcessor implements Disposable {
 
     @Override
     public void dispose() {
-        heightmapImage.dispose();
+        if (!heightmapImage.isDisposed()) heightmapImage.dispose();
     }
 }
