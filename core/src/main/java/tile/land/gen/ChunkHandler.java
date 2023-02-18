@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g3d.Material;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelCache;
+import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.TextureAttribute;
 import com.badlogic.gdx.graphics.g3d.model.MeshPart;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
@@ -62,53 +63,7 @@ public class ChunkHandler extends ApplicationAdapter {
             System.out.println("[CHUNK DATA] " + chunk);
         }
 
-        exampleModifyChunkTile(texture);
-    }
-
-    /**
-     * This is some example code to get a tile and modify it. Here we recolor it and change it's size.
-     * You can take what you get from here and plug this code into an editor. That is
-     * currently beyond the scope of this demo.
-     *
-     * @param texture The current tile texture file.
-     */
-    private void exampleModifyChunkTile(Texture texture) {
-
-        // Pick the tile you want to edit here
-        int worldX = 19;
-        int worldZ = 19;
-
-        // Get chunk coordinates
-        int chunkX = (int) (worldX / (float) CHUNK_SIZE);
-        int chunkZ = (int) (worldZ / (float) CHUNK_SIZE);
-
-        Chunk chunk = getChunk(chunkX, chunkZ, false);
-
-        // Get the local tile on the chunk (0 - CHUNK_SIZE)
-        int localX = worldX - chunkX * CHUNK_SIZE;
-        int localZ = worldZ - chunkZ * CHUNK_SIZE;
-
-        // Grab the mesh from this chunk
-        Mesh mesh = Objects.requireNonNull(chunk).getModelInstance().model.meshes.get(0);
-        int attributesOffset = mesh.getVertexAttributes().vertexSize;
-        int offset = attributesOffset * (localX * CHUNK_SIZE + localZ);
-
-        // Lazy modify mesh
-        Mesh mesh1 = resizeRectangleVertex(mesh, TileCorner.NORTH_WEST, offset, 0, 1, 0);
-        Mesh mesh2 = resizeRectangleVertex(mesh1, TileCorner.NORTH_EAST, offset, 0, 1, 0);
-        Mesh mesh3 = resizeRectangleVertex(mesh2, TileCorner.SOUTH_WEST, offset, 0, 1, 0);
-        Mesh mesh4 = resizeRectangleVertex(mesh3, TileCorner.SOUTH_EAST, offset, 0, 1, 0);
-
-        // Rebuild the mesh
-        MeshPart meshPart = new MeshPart(stringBuilder.toStringAndClear(), mesh4, 0, 6 * CHUNK_SIZE * CHUNK_SIZE, GL30.GL_TRIANGLES);
-
-        // Create a model out of the MeshPart
-        modelBuilder.begin();
-        modelBuilder.part(meshPart, new Material(TextureAttribute.createDiffuse(texture)));
-        Model model = modelBuilder.end();
-
-        // Set and cache the model
-        chunk.setModel(model);
+        exampleModifyChunkTile();
     }
 
     /**
@@ -175,7 +130,7 @@ public class ChunkHandler extends ApplicationAdapter {
 
         // Create a model out of the MeshPart
         modelBuilder.begin();
-        modelBuilder.part(meshPart, new Material(TextureAttribute.createDiffuse(texture)));
+        modelBuilder.part(meshPart, new Material("texture", TextureAttribute.createDiffuse(texture)));
         return modelBuilder.end();
     }
 
@@ -222,29 +177,89 @@ public class ChunkHandler extends ApplicationAdapter {
     }
 
     /**
-     * This code was written by <a href="https://github.com/JamesTKhan">JamesTKhan</a>.
-     * If it is broken find him in the LibGDX discord and ask him how to fix. It's beyond me right now.
+     * This is some example code to get a tile and modify it. Here we recolor it and change it's size.
+     * You can take what you get from here and plug this code into an editor. That is
+     * currently beyond the scope of this demo.
+     */
+    private void exampleModifyChunkTile() {
+        // Pick the tile you want to edit here
+        int worldX = 2;
+        int worldZ = 2;
+
+        // Get chunk coordinates
+        int chunkX = (int) (worldX / (float) CHUNK_SIZE);
+        int chunkZ = (int) (worldZ / (float) CHUNK_SIZE);
+
+        Chunk chunk = getChunk(chunkX, chunkZ, false);
+
+        // Get the local tile on the chunk (0 - CHUNK_SIZE)
+        int localX = worldX - chunkX * CHUNK_SIZE;
+        int localZ = worldZ - chunkZ * CHUNK_SIZE;
+
+        // Grab the mesh from this chunk
+        ModelInstance modelInstance = Objects.requireNonNull(chunk).getModelInstance();
+        Mesh mesh = modelInstance.model.meshes.get(0);
+
+        // Lazy modify mesh
+        Mesh mesh1 = resizeRectangleVertex(mesh, localX, localZ, 0, 5, 0, 0, 5, 0, 0, 5, 0, 0, 5, 0);
+
+        // Rebuild the mesh
+        MeshPart meshPart = new MeshPart(stringBuilder.toStringAndClear(), mesh1, 0, 6 * CHUNK_SIZE * CHUNK_SIZE, GL30.GL_TRIANGLES);
+
+        // Create a model out of the MeshPart
+        modelBuilder.begin();
+        modelBuilder.part(meshPart, modelInstance.getMaterial("texture"));
+        Model model = modelBuilder.end();
+
+        // Set and cache the model
+        chunk.setModel(model);
+    }
+
+    /**
+     * Resizes a tile inside the mesh. This is done by modifying the position attribute of the vertex.
      *
-     * @param mesh            The mesh we want to edit.
-     * @param tileCorner      The tile corner we want to edit.
-     * @param vertCountOffset How many "tiles/meshes" to skip to get the right mesh to edit?
-     * @param resizeX         The new x position.
-     * @param resizeY         The new y position.
-     * @param resizeZ         The new z position.
+     * @param mesh   The mesh we want to edit.
+     * @param localX The local X tile we want to edit. Must be between 0 - CHUNK_SIZE.
+     * @param localZ The local X tile we want to edit. Must be between 0 - CHUNK_SIZE.
+     * @param x0     First corner X
+     * @param y0     First corner Y
+     * @param z0     First corner Z
+     * @param x1     Second corner X
+     * @param y1     Second corner Y
+     * @param z1     Second corner Z
+     * @param x2     Third corner X
+     * @param y2     Third corner Y
+     * @param z2     Third corner Z
+     * @param x3     Forth corner X
+     * @param y3     Forth corner Y
+     * @param z3     Forth corner Z
+     * @return A mesh containing the changes made here.
      */
     @SuppressWarnings("SameParameterValue")
-    private Mesh resizeRectangleVertex(Mesh mesh, TileCorner tileCorner, int vertCountOffset, int resizeX, float resizeY, int resizeZ) {
+    private Mesh resizeRectangleVertex(Mesh mesh, int localX, int localZ, int x0, float y0, int z0, int x1, float y1, int z1, int x2, float y2, int z2, int x3, float y3, int z3) {
+
+        // Get the VertexAttributes. We need to know which ones are here.
+        // If we only want to edit the position, then we need to skip over the
+        // other VertexAttributes.
         VertexAttributes vertexAttributes = mesh.getVertexAttributes();
         int offset = vertexAttributes.getOffset(VertexAttributes.Usage.Position);
 
-        int vertexSize = mesh.getVertexSize() / 4;
+        // Get the exact tile we want to edit
+        int attributesOffset = mesh.getVertexAttributes().vertexSize;
+        int tile = attributesOffset * (localX * CHUNK_SIZE + localZ);
+
+        // Calculate how big the vertices array should be
         int vertCount = mesh.getNumVertices() * mesh.getVertexSize() / 4;
 
-        float[] vertices = new float[vertCount];
-        mesh.getVertices(vertices); // Gets the vertices we want to edit? (do not delete)
+        // Get the vertex size
+        int vertexSize = mesh.getVertexSize() / 4;
 
-        // Get XYZ vertices position data
-        int vertex = tileCorner.getVertexID() * vertexSize + vertCountOffset;
+        // Gets the vertices we want to edit
+        float[] vertices = new float[vertCount];
+        mesh.getVertices(vertices);
+
+        // Corner [0,0] ///////////////////////////////////////
+        int vertex = TileCorner.NORTH_WEST.getVertexID() * vertexSize + tile;
         int indexX = vertex + offset;
         int indexY = vertex + 1 + offset;
         int indexZ = vertex + 2 + offset;
@@ -254,9 +269,54 @@ public class ChunkHandler extends ApplicationAdapter {
         float z = vertices[indexZ];
 
         // Grow/shrink the vertices
-        vertices[indexX] = x + resizeX;
-        vertices[indexY] = y + resizeY;
-        vertices[indexZ] = z + resizeZ;
+        vertices[indexX] = x + x0;
+        vertices[indexY] = y + y0;
+        vertices[indexZ] = z + z0;
+
+        // Corner [0,1] ///////////////////////////////////////
+        vertex = TileCorner.SOUTH_WEST.getVertexID() * vertexSize + tile;
+        indexX = vertex + offset;
+        indexY = vertex + 1 + offset;
+        indexZ = vertex + 2 + offset;
+
+        x = vertices[indexX];
+        y = vertices[indexY];
+        z = vertices[indexZ];
+
+        // Grow/shrink the vertices
+        vertices[indexX] = x + x1;
+        vertices[indexY] = y + y1;
+        vertices[indexZ] = z + z1;
+
+        // Corner [1,0] ///////////////////////////////////////
+        vertex = TileCorner.NORTH_EAST.getVertexID() * vertexSize + tile;
+        indexX = vertex + offset;
+        indexY = vertex + 1 + offset;
+        indexZ = vertex + 2 + offset;
+
+        x = vertices[indexX];
+        y = vertices[indexY];
+        z = vertices[indexZ];
+
+        // Grow/shrink the vertices
+        vertices[indexX] = x + x2;
+        vertices[indexY] = y + y2;
+        vertices[indexZ] = z + z2;
+
+        // Corner [1,1] ///////////////////////////////////////
+        vertex = TileCorner.SOUTH_EAST.getVertexID() * vertexSize + tile;
+        indexX = vertex + offset;
+        indexY = vertex + 1 + offset;
+        indexZ = vertex + 2 + offset;
+
+        x = vertices[indexX];
+        y = vertices[indexY];
+        z = vertices[indexZ];
+
+        // Grow/shrink the vertices
+        vertices[indexX] = x + x3;
+        vertices[indexY] = y + y3;
+        vertices[indexZ] = z + z3;
 
         return mesh.updateVertices(offset, vertices);
     }
