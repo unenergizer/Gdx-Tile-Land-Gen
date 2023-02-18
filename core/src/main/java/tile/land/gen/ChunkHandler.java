@@ -3,15 +3,14 @@ package tile.land.gen;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.*;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g3d.Material;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelCache;
-import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.TextureAttribute;
-import com.badlogic.gdx.graphics.g3d.model.Node;
-import com.badlogic.gdx.graphics.g3d.model.NodePart;
-import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
+import com.badlogic.gdx.graphics.g3d.model.MeshPart;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.utils.StringBuilder;
 import lombok.RequiredArgsConstructor;
 
@@ -34,6 +33,9 @@ public class ChunkHandler extends ApplicationAdapter {
     private final ModelBuilder modelBuilder;
     private final PerspectiveCamera camera;
 
+    private int currentChunkX;
+    private int currentChunkZ;
+
     @Override
     public void create() {
         // Set the heightmap image we want to use
@@ -41,14 +43,13 @@ public class ChunkHandler extends ApplicationAdapter {
 
         // Get the texture info ready
         Texture texture = new Texture(Gdx.files.internal("dirt.png"));
-        Material material = new Material(TextureAttribute.createDiffuse(texture));
-        long attributes = VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.TextureCoordinates | VertexAttributes.Usage.ColorPacked;
+        Color color = Color.WHITE;
 
         // Generate chunk
-        for (int x = 0; x < WORLD_X_LENGTH; x++) {
-            for (int z = 0; z < WORLD_Z_LENGTH; z++) {
-                Chunk chunk = getChunk(x, z, true);
-                Model model = generateChunkModel(texture, material, attributes, x, z);
+        for (int chunkX = 0; chunkX < WORLD_X_LENGTH; chunkX++) {
+            for (int chunkZ = 0; chunkZ < WORLD_Z_LENGTH; chunkZ++) {
+                Chunk chunk = getChunk(chunkX, chunkZ, true);
+                Model model = generateChunkModel(texture, color, chunkX, chunkZ);
                 Objects.requireNonNull(chunk).setModel(model);
             }
         }
@@ -74,91 +75,150 @@ public class ChunkHandler extends ApplicationAdapter {
     private void exampleModifyChunkTile(Texture texture) {
 
         // Pick the tile you want to edit here
-        int x = 1;
-        int z = 1;
+        int worldX = 19;
+        int worldZ = 19;
 
-        NodeData nodeData = getChunkTile(x, z);
-        Node node = nodeData.getNode();
+        // Get chunk coordinates
+        int chunkX = (int) (worldX / (float) CHUNK_SIZE);
+        int chunkZ = (int) (worldZ / (float) CHUNK_SIZE);
 
-        NodePart nodePart = node.parts.get(0);
-        // Grab the existing material? If all rectangles share the same material, any edit here will be for all of them
-        //        Material material1 = node.parts.get(0).material;
-        Material material1 = new Material(TextureAttribute.createDiffuse(texture)); // Create a new material so to not affect other tiles
-        material1.set(ColorAttribute.createDiffuse(Color.BLUE));
-        nodePart.material = material1;
+        Chunk chunk = getChunk(chunkX, chunkZ, false);
 
-        // grab the mesh, lets modify it
-        Mesh mesh = nodePart.meshPart.mesh;
-        int vertCount = mesh.getVertexSize();
-        resizeRectangleVertex(mesh, TileCorner.SOUTH_WEST, vertCount * (nodeData.getLocalX() * CHUNK_SIZE + nodeData.getLocalZ()), 0, 15, 0);
+        // Get the local tile on the chunk (0 - CHUNK_SIZE)
+        int localX = worldX - chunkX * CHUNK_SIZE;
+        int localZ = worldZ - chunkZ * CHUNK_SIZE;
+
+        // Grab the mesh from this chunk
+        Mesh mesh = Objects.requireNonNull(chunk).getModelInstance().model.meshes.get(0);
+        int attributesOffset = mesh.getVertexAttributes().vertexSize;
+        int offset = attributesOffset * (localX * CHUNK_SIZE + localZ);
+
+        // Lazy modify mesh
+        Mesh mesh1 = resizeRectangleVertex(mesh, TileCorner.NORTH_WEST, offset, 0, 1, 0);
+        Mesh mesh2 = resizeRectangleVertex(mesh1, TileCorner.NORTH_EAST, offset, 0, 1, 0);
+        Mesh mesh3 = resizeRectangleVertex(mesh2, TileCorner.SOUTH_WEST, offset, 0, 1, 0);
+        Mesh mesh4 = resizeRectangleVertex(mesh3, TileCorner.SOUTH_EAST, offset, 0, 1, 0);
+
+        // Rebuild the mesh
+        MeshPart meshPart = new MeshPart(stringBuilder.toStringAndClear(), mesh4, 0, 6 * CHUNK_SIZE * CHUNK_SIZE, GL30.GL_TRIANGLES);
+
+        // Create a model out of the MeshPart
+        modelBuilder.begin();
+        modelBuilder.part(meshPart, new Material(TextureAttribute.createDiffuse(texture)));
+        Model model = modelBuilder.end();
+
+        // Set and cache the model
+        chunk.setModel(model);
     }
 
     /**
      * Generates a chunk landscape model.
      *
-     * @param texture            The texture to paint on this model.
-     * @param material           The material for this model.
-     * @param attributes         The attributes for this model.
-     * @param chunkX             The X location of this chunk.
-     * @param chunkZ             The Z location of this chunk.
+     * @param texture The texture to paint on this model.
+     * @param color   The color we want to apply to the texture.
+     * @param chunkX  The X location of this chunk.
+     * @param chunkZ  The Z location of this chunk.
      * @return A model that represents a landscape.
      */
-    private Model generateChunkModel(Texture texture, Material material, long attributes, int chunkX, int chunkZ) {
-        modelBuilder.begin();
-        modelBuilder.manage(texture);
+    @SuppressWarnings("PointlessArithmeticExpression")
+    private Model generateChunkModel(Texture texture, Color color, int chunkX, int chunkZ) {
+        // Define the attributes for this model
+        VertexAttribute position = new VertexAttribute(VertexAttributes.Usage.Position, 3, ShaderProgram.POSITION_ATTRIBUTE);
+        VertexAttribute colorPacked = new VertexAttribute(VertexAttributes.Usage.ColorPacked, 4, ShaderProgram.COLOR_ATTRIBUTE);
+        VertexAttribute textureCoordinates = new VertexAttribute(VertexAttributes.Usage.TextureCoordinates, 2, ShaderProgram.TEXCOORD_ATTRIBUTE + "0");
 
-        Node node;
-        MeshPartBuilder meshPartBuilder;
+        // Init vertices array
+        final int quadVertices = 4; // A quad has 4 vertices, one at each corner
+        float[] vertices = new float[(position.numComponents + colorPacked.numComponents + textureCoordinates.numComponents) * quadVertices * CHUNK_SIZE * CHUNK_SIZE];
 
+        // Populate the vertices array with data
+        int vertexOffset = 0;
         for (int x = 0; x < CHUNK_SIZE; x++) {
             for (int z = 0; z < CHUNK_SIZE; z++) {
-                stringBuilder.append(x);
-                stringBuilder.append(SLASH);
-                stringBuilder.append(z);
-                String id = stringBuilder.toStringAndClear();
 
                 int tileX = x + chunkX * CHUNK_SIZE;
                 int tileZ = z + chunkZ * CHUNK_SIZE;
 
-                float y0 = heightmapProcessor.getHeight(tileX, tileZ);               // 0,0 - North West Corner
-                float y1 = heightmapProcessor.getHeight(tileX, tileZ + 1);        // 0,1 - South West Corner
-                float y2 = heightmapProcessor.getHeight(tileX + 1, tileZ);        // 1,0 - North East Corner
-                float y3 = heightmapProcessor.getHeight(tileX + 1, tileZ + 1); // 1,1 - South East Corner
+                float y0 = heightmapProcessor.getHeight(tileX, tileZ);               // [0,0] - North West Corner
+                float y1 = heightmapProcessor.getHeight(tileX, tileZ + 1);        // [0,1] - South West Corner
+                float y2 = heightmapProcessor.getHeight(tileX + 1, tileZ);        // [1,0] - North East Corner
+                float y3 = heightmapProcessor.getHeight(tileX + 1, tileZ + 1); // [1,1] - South East Corner
 
-                // Define a new node for this chunk
-                node = modelBuilder.node();
-                node.id = id;
-                meshPartBuilder = modelBuilder.part(id, GL20.GL_TRIANGLES, attributes, material);
-//                meshPartBuilder.setColor(Color.GREEN); // Set a color if you like
-                meshPartBuilder.rect(
-                    x, y1, z + TILE_SIZE,                // South West Corner
-                    x + TILE_SIZE, y3, z + TILE_SIZE,    // South East Corner
-                    x + TILE_SIZE, y2, z,                    // North East Corner
-                    x, y0, z,                                // North West Corner
-                    1f, 1f, 1f);
-
-                // Render debug lines over the tile. Currently, this will break the modification of the example tile code.
-                // Not quiet sure how to fix that yet. Will investigate...
-                if (!RENDER_DEBUG_LINES) continue;
-                float debugLineHeight = .01f;
-
-                // Line 1
-                node = modelBuilder.node();
-                node.id = id + "debug";
-                meshPartBuilder = modelBuilder.part(id + "debug", GL20.GL_LINES, attributes, material);
-                meshPartBuilder.setColor(Color.BLUE);
-                meshPartBuilder.line(x, y0 + debugLineHeight, z, x, y1 + debugLineHeight, z + TILE_SIZE);
-
-                // Line 2
-                node = modelBuilder.node();
-                node.id = id + "debug";
-                meshPartBuilder = modelBuilder.part(id + "debug", GL20.GL_LINES, attributes, material);
-                meshPartBuilder.setColor(Color.RED);
-                meshPartBuilder.line(x, y1 + debugLineHeight, z + TILE_SIZE, x + TILE_SIZE, y3 + debugLineHeight, z + TILE_SIZE);
+                vertexOffset = floorTile(vertices, vertexOffset, x, z, y0, y1, y2, y3, color, new TextureRegion(texture));
             }
         }
 
+        // Generate the indices
+        short[] indices = new short[6 * CHUNK_SIZE * CHUNK_SIZE];
+        short j = 0;
+        for (int i = 0; i < indices.length; i += 6, j += 4) {
+            indices[i + 0] = (short) (j + 2);
+            indices[i + 1] = (short) (j + 1);
+            indices[i + 2] = (short) (j + 3);
+            indices[i + 3] = (short) (j + 0);
+            indices[i + 4] = (short) (j + 3);
+            indices[i + 5] = (short) (j + 1);
+        }
+
+        // Create the mesh
+        Mesh mesh = new Mesh(true, vertices.length, indices.length, position, colorPacked, textureCoordinates);
+        mesh.setVertices(vertices);
+        mesh.setIndices(indices);
+
+        // Create the MeshPart I'd
+        stringBuilder.append(chunkX);
+        stringBuilder.append(SLASH);
+        stringBuilder.append(chunkZ);
+
+        // Create the MeshPart
+        MeshPart meshPart = new MeshPart(stringBuilder.toStringAndClear(), mesh, 0, 6 * CHUNK_SIZE * CHUNK_SIZE, GL30.GL_TRIANGLES);
+
+        // Create a model out of the MeshPart
+        modelBuilder.begin();
+        modelBuilder.part(meshPart, new Material(TextureAttribute.createDiffuse(texture)));
         return modelBuilder.end();
+    }
+
+    private int floorTile(float[] vertices, int vertexOffset, float x, float z, float y0, float y1, float y2, float y3, Color tileColor, TextureRegion textureRegion) {
+        final float color = Color.toFloatBits(tileColor.r, tileColor.g, tileColor.b, tileColor.a);
+        float u1 = textureRegion.getU();
+        float v1 = textureRegion.getV2();
+        float u2 = textureRegion.getU2();
+        float v2 = textureRegion.getV();
+
+        // Bottom Left [0,0]
+        vertices[vertexOffset++] = x;
+        vertices[vertexOffset++] = y0;
+        vertices[vertexOffset++] = z;
+        vertices[vertexOffset++] = color;
+        vertices[vertexOffset++] = u1;
+        vertices[vertexOffset++] = v1;
+
+        // Bottom Right [1,0]
+        vertices[vertexOffset++] = x + TILE_SIZE;
+        vertices[vertexOffset++] = y2;
+        vertices[vertexOffset++] = z;
+        vertices[vertexOffset++] = color;
+        vertices[vertexOffset++] = u2;
+        vertices[vertexOffset++] = v1;
+
+        // Top Right [1,1]
+        vertices[vertexOffset++] = x + TILE_SIZE;
+        vertices[vertexOffset++] = y3;
+        vertices[vertexOffset++] = z + TILE_SIZE;
+        vertices[vertexOffset++] = color;
+        vertices[vertexOffset++] = u2;
+        vertices[vertexOffset++] = v2;
+
+        // Top Left [0,1]
+        vertices[vertexOffset++] = x;
+        vertices[vertexOffset++] = y1;
+        vertices[vertexOffset++] = z + TILE_SIZE;
+        vertices[vertexOffset++] = color;
+        vertices[vertexOffset++] = u1;
+        vertices[vertexOffset++] = v2;
+
+        return vertexOffset;
     }
 
     /**
@@ -173,7 +233,7 @@ public class ChunkHandler extends ApplicationAdapter {
      * @param resizeZ         The new z position.
      */
     @SuppressWarnings("SameParameterValue")
-    private void resizeRectangleVertex(Mesh mesh, TileCorner tileCorner, int vertCountOffset, int resizeX, float resizeY, int resizeZ) {
+    private Mesh resizeRectangleVertex(Mesh mesh, TileCorner tileCorner, int vertCountOffset, int resizeX, float resizeY, int resizeZ) {
         VertexAttributes vertexAttributes = mesh.getVertexAttributes();
         int offset = vertexAttributes.getOffset(VertexAttributes.Usage.Position);
 
@@ -183,58 +243,22 @@ public class ChunkHandler extends ApplicationAdapter {
         float[] vertices = new float[vertCount];
         mesh.getVertices(vertices); // Gets the vertices we want to edit? (do not delete)
 
-        System.out.println("[MODIFY DATA] VertexAttributes: " + vertexAttributes.vertexSize + ", Offset: " + offset + ", VertexSize: " + vertexSize + ", Vertex Count: " + vertCount + ", Verticies: " + vertices.length);
-
         // Get XYZ vertices position data
-        int currentVertex = 0;
-        for (int i = vertCountOffset; i < vertices.length; i += vertexSize) {
-            if (currentVertex == tileCorner.getVertexID()) {
-                int indexX = i + offset;
-                int indexY = i + 1 + offset;
-                int indexZ = i + 2 + offset;
+        int vertex = tileCorner.getVertexID() * vertexSize + vertCountOffset;
+        int indexX = vertex + offset;
+        int indexY = vertex + 1 + offset;
+        int indexZ = vertex + 2 + offset;
 
-                float x = vertices[indexX];
-                float y = vertices[indexY];
-                float z = vertices[indexZ];
+        float x = vertices[indexX];
+        float y = vertices[indexY];
+        float z = vertices[indexZ];
 
-                // Grow/shrink the vertices
-                vertices[indexX] = x + resizeX;
-                vertices[indexY] = y + resizeY;
-                vertices[indexZ] = z + resizeZ;
-                break;
-            }
-            currentVertex++;
-        }
+        // Grow/shrink the vertices
+        vertices[indexX] = x + resizeX;
+        vertices[indexY] = y + resizeY;
+        vertices[indexZ] = z + resizeZ;
 
-        mesh.updateVertices(offset, vertices);
-    }
-
-    /**
-     * Gets a chunk tile in the world.
-     *
-     * @param worldX The world x location.
-     * @param worldZ The world z location.
-     * @return NodeData with info about this tile.
-     */
-    private NodeData getChunkTile(int worldX, int worldZ) {
-        if (worldX < 0 || worldX > WORLD_X_LENGTH * CHUNK_SIZE || worldZ < 0 || worldZ > WORLD_Z_LENGTH * CHUNK_SIZE) {
-            throw new RuntimeException("World cords out of bounds: " + worldX + SLASH + worldZ);
-        }
-
-        int chunkX = (int) (worldX / (float) CHUNK_SIZE);
-        int chunkZ = (int) (worldZ / (float) CHUNK_SIZE);
-
-        Chunk chunk = getChunk(chunkX, chunkZ, false);
-
-        int localX = worldX - chunkX * CHUNK_SIZE;
-        int localZ = worldZ - chunkZ * CHUNK_SIZE;
-
-        stringBuilder.append(localX);
-        stringBuilder.append(SLASH);
-        stringBuilder.append(localZ);
-
-        Node node = Objects.requireNonNull(chunk).getModelInstance().getNode(stringBuilder.toStringAndClear());
-        return new NodeData(localX, localZ, node);
+        return mesh.updateVertices(offset, vertices);
     }
 
     /**
@@ -294,6 +318,21 @@ public class ChunkHandler extends ApplicationAdapter {
                 cache.add(modelCache);
             }
         }
+    }
+
+    /**
+     * Checks to see if the camera has moved out of their current chunk.
+     *
+     * @return True if the camera has moved to a new chunk, false otherwise.
+     */
+    public boolean hasLeftChunk() {
+        int newChunkX = getChunkTileX();
+        int newChunkZ = getChunkTileZ();
+
+        if (currentChunkX == newChunkX && currentChunkZ == newChunkZ) return false;
+        currentChunkX = newChunkX;
+        currentChunkZ = newChunkZ;
+        return true;
     }
 
     /**

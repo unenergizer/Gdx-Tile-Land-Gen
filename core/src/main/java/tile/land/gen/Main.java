@@ -88,6 +88,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void updateModelInstanceList() {
+        if (!chunkHandler.hasLeftChunk()) return;
         modelCache.begin();
         modelCache.add(xyzModelInstance);
         chunkHandler.getNearbyChunks(modelCache);
